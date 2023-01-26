@@ -8,12 +8,12 @@
 //! # Examples
 //!
 //!```rust, no_run
-//!# use embedded_hal_mock::eh1::*;
-//!# fn main() -> Result<(), embedded_hal::spi::ErrorKind> {
+//!# use embedded_hal_mock::*;
+//!# fn main() -> Result<(), MockError> {
 //!use embedded_graphics::{
-//!    pixelcolor::BinaryColor::On as Black, prelude::*, primitives::{Line, PrimitiveStyle},
+//!    prelude::*, primitives::{Line, PrimitiveStyle},
 //!};
-//!use epd_waveshare::{epd4in2::*, prelude::*};
+//!use epd_waveshare::{epd4in2bc::*, prelude::*};
 //!#
 //!# let expectations = [];
 //!# let mut spi = spi::Mock::new(&expectations);
@@ -22,17 +22,17 @@
 //!# let busy_in = pin::Mock::new(&expectations);
 //!# let dc = pin::Mock::new(&expectations);
 //!# let rst = pin::Mock::new(&expectations);
-//!# let mut delay = delay::NoopDelay::new();
+//!# let mut delay = delay::MockNoop::new();
 //!
 //!// Setup EPD
-//!let mut epd = Epd4in2::new(&mut spi, busy_in, dc, rst, &mut delay, None)?;
+//!let mut epd = Epd4in2bc::new(&mut spi, cs_pin, busy_in, dc, rst, &mut delay, None)?;
 //!
 //!// Use display graphics from embedded-graphics
-//!let mut display = Display4in2::default();
+//!let mut display = Display4in2bc::default();
 //!
 //!// Use embedded graphics for drawing a line
 //!let _ = Line::new(Point::new(0, 120), Point::new(0, 295))
-//!    .into_styled(PrimitiveStyle::with_stroke(Color::Black, 1))
+//!    .into_styled(PrimitiveStyle::with_stroke(TriColor::Chromatic, 1))
 //!    .draw(&mut display);
 //!
 //!    // Display updated frame
@@ -49,59 +49,60 @@
 //!
 //! BE CAREFUL! The screen can get ghosting/burn-ins through the Partial Fast Update Drawing.
 
-use embedded_hal::{delay::*, digital::*, spi::SpiDevice};
+use embedded_hal::{
+    blocking::{delay::*, spi::Write},
+    digital::v2::*,
+};
 
 use crate::interface::DisplayInterface;
-use crate::traits::{InternalWiAdditions, QuickRefresh, RefreshLut, WaveshareDisplay};
+use crate::traits::{
+    InternalWiAdditions, QuickRefresh, RefreshLut, WaveshareDisplay, WaveshareThreeColorDisplay,
+};
+
+use crate::color::TriColor;
 
 //The Lookup Tables for the Display
-pub mod constants;
+use crate::epd4in2::command::Command;
 use crate::epd4in2::constants::*;
 
-/// Width of the display
-pub const WIDTH: u32 = 400;
-/// Height of the display
-pub const HEIGHT: u32 = 300;
+use crate::epd4in2::HEIGHT;
+use crate::epd4in2::WIDTH;
 /// Default Background Color
-pub const DEFAULT_BACKGROUND_COLOR: Color = Color::White;
+pub const DEFAULT_BACKGROUND_COLOR: TriColor = TriColor::White;
 const IS_BUSY_LOW: bool = true;
-const SINGLE_BYTE_WRITE: bool = true;
 
-use crate::color::Color;
-
-pub(crate) mod command;
-use self::command::Command;
 use crate::buffer_len;
 
 /// Full size buffer for use with the 4in2 EPD
 #[cfg(feature = "graphics")]
-pub type Display4in2 = crate::graphics::Display<
+pub type Display4in2bc = crate::graphics::Display<
     WIDTH,
     HEIGHT,
-    { crate::graphics::DisplayMode::BwrBitOff as u8 },
-    { buffer_len(WIDTH as usize, HEIGHT as usize) },
-    Color,
+    { crate::graphics::DisplayMode::BwrBitOnColorInverted as u8 },
+    { buffer_len(WIDTH as usize, HEIGHT as usize * 2) },
+    TriColor,
 >;
 
-/// Epd4in2 driver
+/// Epd4in2bc driver
 ///
-pub struct Epd4in2<SPI, BUSY, DC, RST, DELAY> {
+pub struct Epd4in2bc<SPI, CS, BUSY, DC, RST, DELAY> {
     /// Connection Interface
-    interface: DisplayInterface<SPI, BUSY, DC, RST, DELAY, SINGLE_BYTE_WRITE>,
+    interface: DisplayInterface<SPI, CS, BUSY, DC, RST, DELAY>,
     /// Background Color
-    color: Color,
+    color: TriColor,
     /// Refresh LUT
     refresh: RefreshLut,
 }
 
-impl<SPI, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, BUSY, DC, RST, DELAY>
-    for Epd4in2<SPI, BUSY, DC, RST, DELAY>
+impl<SPI, CS, BUSY, DC, RST, DELAY> InternalWiAdditions<SPI, CS, BUSY, DC, RST, DELAY>
+    for Epd4in2bc<SPI, CS, BUSY, DC, RST, DELAY>
 where
-    SPI: SpiDevice,
+    SPI: Write<u8>,
+    CS: OutputPin,
     BUSY: InputPin,
     DC: OutputPin,
     RST: OutputPin,
-    DELAY: DelayNs,
+    DELAY: DelayUs<u32>,
 {
     fn init(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         // reset the device
@@ -118,61 +119,113 @@ where
         self.interface
             .cmd_with_data(spi, Command::BoosterSoftStart, &[0x17, 0x17, 0x17])?;
 
-        // power on
-        self.command(spi, Command::PowerOn)?;
-        delay.delay_us(5000);
-        self.wait_until_idle(spi, delay)?;
-
         // set the panel settings
-        self.cmd_with_data(spi, Command::PanelSetting, &[0x3F])?;
+        self.cmd_with_data(spi, Command::PanelSetting, &[0x0F])?;
 
-        // Set Frequency, 200 Hz didn't work on my board
-        // 150Hz and 171Hz wasn't tested yet
-        // TODO: Test these other frequencies
-        // 3A 100HZ   29 150Hz 39 200HZ  31 171HZ DEFAULT: 3c 50Hz
-        self.cmd_with_data(spi, Command::PllControl, &[0x3A])?;
+        // // Set Frequency, 200 Hz didn't work on my board
+        // // 150Hz and 171Hz wasn't tested yet
+        // // TODO: Test these other frequencies
+        // // 3A 100HZ   29 150Hz 39 200HZ  31 171HZ DEFAULT: 3c 50Hz
+        self.cmd_with_data(spi, Command::PllControl, &[0x3C])?;
 
         self.send_resolution(spi)?;
 
         self.interface
             .cmd_with_data(spi, Command::VcmDcSetting, &[0x12])?;
 
-        //VBDF 17|D7 VBDW 97  VBDB 57  VBDF F7  VBDW 77  VBDB 37  VBDR B7
         self.interface
-            .cmd_with_data(spi, Command::VcomAndDataIntervalSetting, &[0x97])?;
+            .cmd_with_data(spi, Command::VcomAndDataIntervalSetting, &[0x7f])?;
 
         self.set_lut(spi, delay, None)?;
+
+        // power on
+        self.command(spi, Command::PowerOn)?;
+        delay.delay_us(5000);
 
         self.wait_until_idle(spi, delay)?;
         Ok(())
     }
 }
 
-impl<SPI, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, BUSY, DC, RST, DELAY>
-    for Epd4in2<SPI, BUSY, DC, RST, DELAY>
+impl<SPI, CS, BUSY, DC, RST, DELAY> WaveshareThreeColorDisplay<SPI, CS, BUSY, DC, RST, DELAY>
+    for Epd4in2bc<SPI, CS, BUSY, DC, RST, DELAY>
 where
-    SPI: SpiDevice,
+    SPI: Write<u8>,
+    CS: OutputPin,
     BUSY: InputPin,
     DC: OutputPin,
     RST: OutputPin,
-    DELAY: DelayNs,
+    DELAY: DelayUs<u32>,
 {
-    type DisplayColor = Color;
+    fn update_color_frame(
+        &mut self,
+        spi: &mut SPI,
+        delay: &mut DELAY,
+        black: &[u8],
+        chromatic: &[u8],
+    ) -> Result<(), SPI::Error> {
+        self.update_achromatic_frame(spi, delay, black)?;
+        self.update_chromatic_frame(spi, delay, chromatic)
+    }
+
+    /// Update only the black/white data of the display.
+    ///
+    /// Finish by calling `update_chromatic_frame`.
+    fn update_achromatic_frame(
+        &mut self,
+        spi: &mut SPI,
+        _delay: &mut DELAY,
+        black: &[u8],
+    ) -> Result<(), SPI::Error> {
+        self.interface.cmd(spi, Command::DataStartTransmission1)?;
+        self.interface.data(spi, black)?;
+        Ok(())
+    }
+
+    /// Update only chromatic data of the display.
+    ///
+    /// This data takes precedence over the black/white data.
+    fn update_chromatic_frame(
+        &mut self,
+        spi: &mut SPI,
+        delay: &mut DELAY,
+        chromatic: &[u8],
+    ) -> Result<(), SPI::Error> {
+        self.interface.cmd(spi, Command::DataStartTransmission2)?;
+        self.interface.data(spi, chromatic)?;
+
+        self.wait_until_idle(spi, delay)?;
+        Ok(())
+    }
+}
+
+impl<SPI, CS, BUSY, DC, RST, DELAY> WaveshareDisplay<SPI, CS, BUSY, DC, RST, DELAY>
+    for Epd4in2bc<SPI, CS, BUSY, DC, RST, DELAY>
+where
+    SPI: Write<u8>,
+    CS: OutputPin,
+    BUSY: InputPin,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayUs<u32>,
+{
+    type DisplayColor = TriColor;
+
     fn new(
         spi: &mut SPI,
+        cs: CS,
         busy: BUSY,
         dc: DC,
         rst: RST,
         delay: &mut DELAY,
         delay_us: Option<u32>,
     ) -> Result<Self, SPI::Error> {
-        let interface = DisplayInterface::new(busy, dc, rst, delay_us);
-        let color = DEFAULT_BACKGROUND_COLOR;
+        let interface = DisplayInterface::new(cs, busy, dc, rst, delay_us);
 
-        let mut epd = Epd4in2 {
+        let mut epd = Epd4in2bc {
             interface,
-            color,
-            refresh: RefreshLut::Full,
+            color: DEFAULT_BACKGROUND_COLOR,
+            refresh: RefreshLut::Quick,
         };
 
         epd.init(spi, delay)?;
@@ -183,7 +236,7 @@ where
     fn sleep(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
         self.wait_until_idle(spi, delay)?;
         self.interface
-            .cmd_with_data(spi, Command::VcomAndDataIntervalSetting, &[0x17])?; //border floating
+            .cmd_with_data(spi, Command::VcomAndDataIntervalSetting, &[0x7f])?; //border floating
         self.command(spi, Command::VcmDcSetting)?; // VCOM to 0V
         self.command(spi, Command::PanelSetting)?;
 
@@ -203,11 +256,11 @@ where
         self.init(spi, delay)
     }
 
-    fn set_background_color(&mut self, color: Color) {
+    fn set_background_color(&mut self, color: TriColor) {
         self.color = color;
     }
 
-    fn background_color(&self) -> &Color {
+    fn background_color(&self) -> &TriColor {
         &self.color
     }
 
@@ -226,14 +279,20 @@ where
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
         self.wait_until_idle(spi, delay)?;
-        let color_value = self.color.get_byte_value();
 
         self.interface.cmd(spi, Command::DataStartTransmission1)?;
+        self.interface.data(spi, buffer)?;
+
+        let color_value = self.color.get_byte_value();
+
         self.interface
             .data_x_times(spi, color_value, WIDTH / 8 * HEIGHT)?;
 
         self.interface
             .cmd_with_data(spi, Command::DataStartTransmission2, buffer)?;
+
+        self.command(spi, Command::DataStop)?;
+
         Ok(())
     }
 
@@ -250,43 +309,43 @@ where
         self.wait_until_idle(spi, delay)?;
         if buffer.len() as u32 != width / 8 * height {
             //TODO: panic!! or sth like that
-            //return Err("Wrong buffersize");
+            // return Err("Wrong buffersize");
         }
 
         self.command(spi, Command::PartialIn)?;
         self.command(spi, Command::PartialWindow)?;
+
         self.send_data(spi, &[(x >> 8) as u8])?;
-        let tmp = x & 0xf8;
-        self.send_data(spi, &[tmp as u8])?; // x should be the multiple of 8, the last 3 bit will always be ignored
-        let tmp = tmp + width - 1;
-        self.send_data(spi, &[(tmp >> 8) as u8])?;
-        self.send_data(spi, &[(tmp | 0x07) as u8])?;
+        self.send_data(spi, &[(x & 0xf8) as u8])?; // x should be the multiple of 8, the last 3 bit will always be ignored
+        self.send_data(spi, &[(((x & 0xf8) + width - 1) >> 8) as u8])?;
+        self.send_data(spi, &[(((x & 0xf8) + width - 1) | 0x07) as u8])?;
 
         self.send_data(spi, &[(y >> 8) as u8])?;
-        self.send_data(spi, &[y as u8])?;
-
+        self.send_data(spi, &[(y & 0xff) as u8])?;
         self.send_data(spi, &[((y + height - 1) >> 8) as u8])?;
-        self.send_data(spi, &[(y + height - 1) as u8])?;
+        self.send_data(spi, &[((y + height - 1) & 0xff) as u8])?;
 
         self.send_data(spi, &[0x01])?; // Gates scan both inside and outside of the partial window. (default)
 
-        //TODO: handle dtm somehow
-        let is_dtm1 = false;
-        if is_dtm1 {
-            self.command(spi, Command::DataStartTransmission1)? //TODO: check if data_start transmission 1 also needs "old"/background data here
-        } else {
-            self.command(spi, Command::DataStartTransmission2)?
-        }
-
+        delay.delay_us(2000);
+        self.command(spi, Command::DataStartTransmission1)?;
         self.send_data(spi, buffer)?;
 
+        let color_value = self.color.get_bit_value();
+        self.interface.cmd(spi, Command::DataStartTransmission2)?;
+        self.interface
+            .data_x_times(spi, color_value, WIDTH / 8 * HEIGHT)?;
+
+        delay.delay_us(2000);
         self.command(spi, Command::PartialOut)?;
         Ok(())
     }
 
     fn display_frame(&mut self, spi: &mut SPI, delay: &mut DELAY) -> Result<(), SPI::Error> {
-        self.wait_until_idle(spi, delay)?;
+        self.set_lut(spi, delay, None)?;
         self.command(spi, Command::DisplayRefresh)?;
+        delay.delay_us(100_000);
+        self.wait_until_idle(spi, delay)?;
         Ok(())
     }
 
@@ -305,7 +364,7 @@ where
         self.wait_until_idle(spi, delay)?;
         self.send_resolution(spi)?;
 
-        let color_value = self.color.get_byte_value();
+        let color_value = self.color.get_bit_value();
 
         self.interface.cmd(spi, Command::DataStartTransmission1)?;
         self.interface
@@ -348,13 +407,14 @@ where
     }
 }
 
-impl<SPI, BUSY, DC, RST, DELAY> Epd4in2<SPI, BUSY, DC, RST, DELAY>
+impl<SPI, CS, BUSY, DC, RST, DELAY> Epd4in2bc<SPI, CS, BUSY, DC, RST, DELAY>
 where
-    SPI: SpiDevice,
+    SPI: Write<u8>,
+    CS: OutputPin,
     BUSY: InputPin,
     DC: OutputPin,
     RST: OutputPin,
-    DELAY: DelayNs,
+    DELAY: DelayUs<u32>,
 {
     fn command(&mut self, spi: &mut SPI, command: Command) -> Result<(), SPI::Error> {
         self.interface.cmd(spi, command)
@@ -442,14 +502,15 @@ where
     }
 }
 
-impl<SPI, BUSY, DC, RST, DELAY> QuickRefresh<SPI, BUSY, DC, RST, DELAY>
-    for Epd4in2<SPI, BUSY, DC, RST, DELAY>
+impl<SPI, CS, BUSY, DC, RST, DELAY> QuickRefresh<SPI, CS, BUSY, DC, RST, DELAY>
+    for Epd4in2bc<SPI, CS, BUSY, DC, RST, DELAY>
 where
-    SPI: SpiDevice,
+    SPI: Write<u8>,
+    CS: OutputPin,
     BUSY: InputPin,
     DC: OutputPin,
     RST: OutputPin,
-    DELAY: DelayNs,
+    DELAY: DelayUs<u32>,
 {
     /// To be followed immediately after by `update_old_frame`.
     fn update_old_frame(
@@ -475,7 +536,7 @@ where
         delay: &mut DELAY,
     ) -> Result<(), SPI::Error> {
         self.wait_until_idle(spi, delay)?;
-        // self.send_resolution(spi)?;
+        self.send_resolution(spi)?;
 
         self.interface.cmd(spi, Command::DataStartTransmission2)?;
 
@@ -601,6 +662,6 @@ mod tests {
     fn epd_size() {
         assert_eq!(WIDTH, 400);
         assert_eq!(HEIGHT, 300);
-        assert_eq!(DEFAULT_BACKGROUND_COLOR, Color::White);
+        assert_eq!(DEFAULT_BACKGROUND_COLOR, TriColor::White);
     }
 }
