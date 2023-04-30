@@ -86,7 +86,12 @@ fn main() -> Result<(), std::io::Error> {
     display.set_rotation(DisplayRotation::Rotate270);
     draw_text(&mut display, "Rotation 270!", 5, 50);
 
-    epd4in2bc.update_frame(&mut spi, display.buffer(), &mut delay)?;
+    epd4in2bc.update_color_frame(
+        &mut spi,
+        &mut delay,
+        display.bw_buffer(),
+        display.chromatic_buffer(),
+    )?;
     epd4in2bc
         .display_frame(&mut spi, &mut delay)
         .expect("display frame new graphics");
