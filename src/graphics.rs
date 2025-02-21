@@ -90,7 +90,7 @@ impl<
         const MODE: u8,
         const BYTECOUNT: usize,
         COLOR: ColorType + PixelColor,
-    > Default for Display<WIDTH, HEIGHT, BWRBIT, BYTECOUNT, COLOR>
+    > Default for Display<WIDTH, HEIGHT, MODE, BYTECOUNT, COLOR>
 {
     /// Initialize display with the color '0', which may not be the same on all device.
     /// Many devices have a bit parameter polarity that should be changed if this is not the right
@@ -118,7 +118,7 @@ impl<
         const MODE: u8,
         const BYTECOUNT: usize,
         COLOR: ColorType + PixelColor,
-    > DrawTarget for Display<WIDTH, HEIGHT, BWRBIT, BYTECOUNT, COLOR>
+    > DrawTarget for Display<WIDTH, HEIGHT, MODE, BYTECOUNT, COLOR>
 {
     type Color = COLOR;
     type Error = core::convert::Infallible;
@@ -141,7 +141,7 @@ impl<
         const MODE: u8,
         const BYTECOUNT: usize,
         COLOR: ColorType + PixelColor,
-    > OriginDimensions for Display<WIDTH, HEIGHT, BWRBIT, BYTECOUNT, COLOR>
+    > OriginDimensions for Display<WIDTH, HEIGHT, MODE, BYTECOUNT, COLOR>
 {
     fn size(&self) -> Size {
         match self.rotation {
@@ -157,7 +157,7 @@ impl<
         const MODE: u8,
         const BYTECOUNT: usize,
         COLOR: ColorType + PixelColor,
-    > Display<WIDTH, HEIGHT, BWRBIT, BYTECOUNT, COLOR>
+    > Display<WIDTH, HEIGHT, MODE, BYTECOUNT, COLOR>
 {
     /// get internal buffer to use it (to draw in epd)
     pub fn buffer(&self) -> &[u8] {

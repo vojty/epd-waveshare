@@ -82,7 +82,7 @@ pub trait ColorType {
     /// Return the data used to set a pixel color
     ///
     /// * MODE is used to tell the value of the unused bit when a chromatic
-    /// color is set (TriColor only as for now)
+    ///   color is set (TriColor only as for now)
     /// * pos is the pixel position in the line, used to know which pixels must be set
     ///
     /// Return values are :

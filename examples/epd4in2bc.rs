@@ -24,11 +24,11 @@ use linux_embedded_hal::{
 // needs to be run with sudo because of some sysfs_gpio permission problems and follow-up timing problems
 // see https://github.com/rust-embedded/rust-sysfs-gpio/issues/5 and follow-up issues
 /**                   BCM   Physical
- * 	EPD_CS_PIN      = 26; = 37 (On raspberry Pi put it on CE0 pin 8 physical 24)
-	EPD_BUSY_PIN    = 24; = 18
-	EPD_DC_PIN      = 25; = 22
- 	EPD_RST_PIN     = 17;  = 11
- */
+* 	EPD_CS_PIN      = 26; = 37 (On raspberry Pi put it on CE0 pin 8 physical 24)
+   EPD_BUSY_PIN    = 24; = 18
+   EPD_DC_PIN      = 25; = 22
+    EPD_RST_PIN     = 17;  = 11
+*/
 fn main() -> Result<(), std::io::Error> {
     // Configure SPI
     // Settings are taken from
@@ -68,7 +68,7 @@ fn main() -> Result<(), std::io::Error> {
     let mut delay = Delay {};
 
     let mut epd4in2bc =
-        Epd4in2bc::new(&mut spi, cs, busy, dc, rst, &mut delay,None).expect("eink initalize error");
+        Epd4in2bc::new(&mut spi, busy, dc, rst, &mut delay, None).expect("eink initalize error");
 
     println!("Test all the rotations");
     let mut display = Display4in2bc::default();
