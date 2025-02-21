@@ -65,13 +65,17 @@ const fn line_bytes(width: u32, bits_per_pixel: usize) -> usize {
 ///
 /// Different chromatic displays differently treat the bits in chromatic color planes.
 /// Some of them ([crate::epd2in13bc]) will render a color pixel if bit is set for that pixel,
-/// which is a `BWRBIT = true` mode.
+/// which is a `MODE = BwrBitOn` mode.
 ///
 /// Other displays, like [crate::epd5in83b_v2] in opposite, will draw color pixel if bit is
-/// cleared for that pixel, which is a `BWRBIT = false` mode.
+/// cleared for that pixel, which is a `MODE = BwrBitOff` mode.
 ///
-/// MODE=true: chromatic doesn't override white, white bit cleared for black, white bit set for white, both bits set for chromatic
-/// MODE=false: chromatic does override white, both bits cleared for black, white bit set for white, red bit set for black
+/// A few displays, like [crate::epd4in2bc] will draw color pixel if bit is set for that pixel,
+/// but will invert the color values, which is a `MODE = BwrBitOnColorInverted` mode.
+///
+/// MODE=BwrBitOn: chromatic doesn't override white, white bit cleared for black, white bit set for white, both bits set for chromatic
+/// MODE=BwrBitOff: chromatic does override white, both bits cleared for black, white bit set for white, red bit set for black
+/// MODE=BwrBitOnColorInverted: same as standard, but with color layer values inverted
 pub struct Display<
     const WIDTH: u32,
     const HEIGHT: u32,
