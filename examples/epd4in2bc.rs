@@ -6,8 +6,7 @@ use embedded_graphics::{
     primitives::{Circle, Line, PrimitiveStyle},
     text::{Baseline, Text, TextStyleBuilder},
 };
-use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayMs;
-//use embedded_hal::prelude::*;
+use embedded_hal::delay::DelayNs;
 use epd_waveshare::{
     color::*,
     epd4in2bc::{Display4in2bc, Epd4in2bc},
@@ -17,7 +16,7 @@ use epd_waveshare::{
 use linux_embedded_hal::{
     spidev::{self, SpidevOptions},
     sysfs_gpio::Direction,
-    Delay, Pin, Spidev,
+    Delay, SPIError, SpidevDevice, SysfsPin,
 };
 
 // activate spi, gpio in raspi-config
@@ -29,10 +28,10 @@ use linux_embedded_hal::{
    EPD_DC_PIN      = 25; = 22
     EPD_RST_PIN     = 17;  = 11
 */
-fn main() -> Result<(), std::io::Error> {
+fn main() -> Result<(), SPIError> {
     // Configure SPI
     // Settings are taken from
-    let mut spi = Spidev::open("/dev/spidev0.0").expect("spidev directory");
+    let mut spi = SpidevDevice::open("/dev/spidev0.0").expect("spidev directory");
     let options = SpidevOptions::new()
         .bits_per_word(8)
         .max_speed_hz(4_000_000)
@@ -41,25 +40,25 @@ fn main() -> Result<(), std::io::Error> {
     spi.configure(&options).expect("spi configuration");
 
     // Configure Digital I/O Pin to be used as Chip Select for SPI
-    let cs = Pin::new(26); //BCM7 CE0
+    let cs = SysfsPin::new(26); //BCM7 CE0
     cs.export().expect("cs export");
     while !cs.is_exported() {}
     cs.set_direction(Direction::Out).expect("CS Direction");
     cs.set_value(1).expect("CS Value set to 1");
 
-    let busy = Pin::new(24); //pin 29
+    let busy = SysfsPin::new(24); //pin 29
     busy.export().expect("busy export");
     while !busy.is_exported() {}
     busy.set_direction(Direction::In).expect("busy Direction");
     //busy.set_value(1).expect("busy Value set to 1");
 
-    let dc = Pin::new(25); //pin 31 //bcm6
+    let dc = SysfsPin::new(25); //pin 31 //bcm6
     dc.export().expect("dc export");
     while !dc.is_exported() {}
     dc.set_direction(Direction::Out).expect("dc Direction");
     dc.set_value(1).expect("dc Value set to 1");
 
-    let rst = Pin::new(17); //pin 36 //bcm16
+    let rst = SysfsPin::new(17); //pin 36 //bcm16
     rst.export().expect("rst export");
     while !rst.is_exported() {}
     rst.set_direction(Direction::Out).expect("rst Direction");
@@ -96,7 +95,7 @@ fn main() -> Result<(), std::io::Error> {
         .display_frame(&mut spi, &mut delay)
         .expect("display frame new graphics");
 
-    delay.delay_ms(5000u16);
+    delay.delay_ms(5000);
 
     println!("Now test new graphics with default rotation and three colors:");
     display.clear(TriColor::White).ok();
@@ -146,7 +145,7 @@ fn main() -> Result<(), std::io::Error> {
         .expect("display frame new graphics");
 
     println!("Second frame done. Waiting 5s");
-    delay.delay_ms(5000u16);
+    delay.delay_ms(5000);
 
     // clear both bw buffer and chromatic buffer
     display.clear(TriColor::White).ok();

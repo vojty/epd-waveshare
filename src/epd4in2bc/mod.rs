@@ -8,8 +8,8 @@
 //! # Examples
 //!
 //!```rust, no_run
-//!# use embedded_hal_mock::*;
-//!# fn main() -> Result<(), MockError> {
+//!# use embedded_hal_mock::eh1::*;
+//!# fn main() -> Result<(), embedded_hal::spi::ErrorKind> {
 //!use embedded_graphics::{
 //!    prelude::*, primitives::{Line, PrimitiveStyle},
 //!};
@@ -18,14 +18,14 @@
 //!# let expectations = [];
 //!# let mut spi = spi::Mock::new(&expectations);
 //!# let expectations = [];
-//!# let cs_pin = pin::Mock::new(&expectations);
-//!# let busy_in = pin::Mock::new(&expectations);
-//!# let dc = pin::Mock::new(&expectations);
-//!# let rst = pin::Mock::new(&expectations);
-//!# let mut delay = delay::MockNoop::new();
+//!# let cs_pin = digital::Mock::new(&expectations);
+//!# let busy_in = digital::Mock::new(&expectations);
+//!# let dc = digital::Mock::new(&expectations);
+//!# let rst = digital::Mock::new(&expectations);
+//!# let mut delay = delay::NoopDelay::new();
 //!
 //!// Setup EPD
-//!let mut epd = Epd4in2bc::new(&mut spi, cs_pin, busy_in, dc, rst, &mut delay, None)?;
+//!let mut epd = Epd4in2bc::new(&mut spi, busy_in, dc, rst, &mut delay, None)?;
 //!
 //!// Use display graphics from embedded-graphics
 //!let mut display = Display4in2bc::default();

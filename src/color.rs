@@ -539,28 +539,28 @@ mod tests {
     #[test]
     fn test_tricolor_bitmask() {
         assert_eq!(
-            TriColor::Black.bitmask(false, 0),
+            TriColor::Black.bitmask(DisplayMode::BwrBitOff, 0),
             (0b01111111, u16::from_le_bytes([0b00000000, 0b00000000]))
         );
         assert_eq!(
-            TriColor::White.bitmask(false, 0),
+            TriColor::White.bitmask(DisplayMode::BwrBitOff, 0),
             (0b01111111, u16::from_le_bytes([0b10000000, 0b00000000]))
         );
         assert_eq!(
-            TriColor::Chromatic.bitmask(false, 0),
+            TriColor::Chromatic.bitmask(DisplayMode::BwrBitOff, 0),
             (0b01111111, u16::from_le_bytes([0b10000000, 0b10000000]))
         );
 
         assert_eq!(
-            TriColor::Black.bitmask(true, 0),
+            TriColor::Black.bitmask(DisplayMode::BwrBitOn, 0),
             (0b01111111, u16::from_le_bytes([0b00000000, 0b00000000]))
         );
         assert_eq!(
-            TriColor::White.bitmask(true, 0),
+            TriColor::White.bitmask(DisplayMode::BwrBitOn, 0),
             (0b01111111, u16::from_le_bytes([0b10000000, 0b00000000]))
         );
         assert_eq!(
-            TriColor::Chromatic.bitmask(true, 0),
+            TriColor::Chromatic.bitmask(DisplayMode::BwrBitOn, 0),
             (0b01111111, u16::from_le_bytes([0b00000000, 0b10000000]))
         );
     }

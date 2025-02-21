@@ -497,7 +497,13 @@ mod tests {
 
     #[test]
     fn graphics_set_pixel_tricolor_false() {
-        let mut display = Display::<4, 4, false, { 4 * 4 * 2 / 8 }, TriColor>::default();
+        let mut display = Display::<
+            4,
+            4,
+            { DisplayMode::BwrBitOff as u8 },
+            { 4 * 4 * 2 / 8 },
+            TriColor,
+        >::default();
         display.set_pixel(Pixel(Point::new(0, 0), TriColor::White));
         display.set_pixel(Pixel(Point::new(1, 0), TriColor::Chromatic));
         display.set_pixel(Pixel(Point::new(2, 0), TriColor::Black));
@@ -515,7 +521,9 @@ mod tests {
 
     #[test]
     fn graphics_set_pixel_tricolor_true() {
-        let mut display = Display::<4, 4, true, { 4 * 4 * 2 / 8 }, TriColor>::default();
+        let mut display =
+            Display::<4, 4, { DisplayMode::BwrBitOn as u8 }, { 4 * 4 * 2 / 8 }, TriColor>::default(
+            );
         display.set_pixel(Pixel(Point::new(0, 0), TriColor::White));
         display.set_pixel(Pixel(Point::new(1, 0), TriColor::Chromatic));
         display.set_pixel(Pixel(Point::new(2, 0), TriColor::Black));
